@@ -8,7 +8,7 @@
 >
     <Page title="Création Ticket de Reclassement ">
         <content>
-            <!-- 🟦 Formulaire En-tête -->
+            <!--  Formulaire En-tête -->
             <layout:SimpleForm
                 id="formHeader"
                 editable="true"
@@ -103,7 +103,7 @@
                 />
             </layout:SimpleForm>
 
-            <!-- 🔘 Toolbar avec suppression + ajout -->
+            <!--  Toolbar avec suppression + ajout -->
             <OverflowToolbar class="sapUiSmallMarginTop">
                 <ToolbarSpacer />
                 <Button
@@ -120,7 +120,7 @@
                 />
             </OverflowToolbar>
 
-            <!-- 🔻 Tableau Lignes -->
+            <!--  Tableau Lignes -->
             <Table
                 id="tableLignes"
                 items="{/lignes}"
@@ -169,7 +169,7 @@
                 </items>
             </Table>
 
-            <!-- 🔸 Ligne Solde -->
+            <!--  Ligne Solde -->
             <HBox
                 justifyContent="End"
                 class="sapUiSmallMarginTop"
@@ -184,7 +184,7 @@
                 />
             </HBox>
 
-            <!-- ✅ Boutons -->
+            <!--  Boutons -->
             <HBox
                 class="sapUiSmallMarginTop"
                 justifyContent="End"
@@ -200,6 +200,8 @@
                 <Button
                     text="Exporter"
                     class="sapUiTinyMarginEnd"
+                    press="onExporter"
+                   enabled="{/isExportEnabled}"
                 />
                 <Button
                     text="Nouveau"

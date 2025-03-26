@@ -1,8 +1,10 @@
 sap.ui.define([
     "./BaseController",
     "sap/ui/model/json/JSONModel",
-    "sap/m/MessageToast"
-], function (BaseController, JSONModel, MessageToast) {
+    "sap/m/MessageToast",
+    "sap/m/MessageBox",
+    "sap/ui/export/Spreadsheet"
+], function (BaseController, JSONModel, MessageToast, MessageBox, Spreadsheet) {
     "use strict";
 
     return BaseController.extend("sfdcr1179.controller.MainView", {
@@ -12,12 +14,12 @@ sap.ui.define([
                 solde: "0.00",
                 selectedIndices: [],
                 isFormValid: false,
+                isExportEnabled: false,
                 utilisateur: "",
                 debutTraitement: new Date(),
                 finTraitement: null
             });
 
-            // Récupérer l'utilisateur Fiori
             if (sap.ushell && sap.ushell.Container) {
                 const sUserId = sap.ushell.Container.getUser().getId();
                 oModel.setProperty("/utilisateur", sUserId);
@@ -30,23 +32,19 @@ sap.ui.define([
         onAjouterLigne: function () {
             const oModel = this.getView().getModel();
             const aLignes = oModel.getProperty("/lignes");
-
-            const nouvelleLigne = {
+            aLignes.push({
                 posteId: aLignes.length + 1,
                 codeTransac: "",
                 libelleTransac: "",
                 signe: "",
                 montant: ""
-            };
-
-            aLignes.push(nouvelleLigne);
+            });
             oModel.setProperty("/lignes", aLignes);
             this.mettreAJourValidation();
         },
 
         onSelectionChange: function (oEvent) {
-            const oTable = oEvent.getSource();
-            const aSelectedContexts = oTable.getSelectedContexts();
+            const aSelectedContexts = oEvent.getSource().getSelectedContexts();
             const aIndices = aSelectedContexts.map(ctx => parseInt(ctx.getPath().split("/")[2]));
             this.getView().getModel().setProperty("/selectedIndices", aIndices);
         },
@@ -77,18 +75,9 @@ sap.ui.define([
 
         calculerSolde: function () {
             const oModel = this.getView().getModel();
-            const aLignes = oModel.getProperty("/lignes");
-            let total = 0;
-
-            aLignes.forEach(ligne => {
-                const montant = parseFloat(ligne.montant);
-                if (!isNaN(montant)) {
-                    total += montant;
-                }
-            });
-
+            const total = oModel.getProperty("/lignes")
+                .reduce((acc, l) => acc + (parseFloat(l.montant) || 0), 0);
             oModel.setProperty("/solde", total.toFixed(2));
-            this.mettreAJourValidation();
         },
 
         onChampChange: function () {
@@ -96,16 +85,13 @@ sap.ui.define([
         },
 
         validerChampsRequis: function () {
-            debugger;
             const oView = this.getView();
             const oModel = oView.getModel();
             let isValid = true;
 
-            // Champs requis du formulaire
             const champsForm = [
                 "inputPointVente", "inputDateVente", "inputNumTransaction", "inputTypeTransaction",
-                "inputNumCaisse", "inputDevise", "inputUtilisateur", "inputRefTicket",
-                "inputDebut"
+                "inputNumCaisse", "inputDevise", "inputUtilisateur", "inputRefTicket", "inputDebut"
             ];
 
             champsForm.forEach(id => {
@@ -119,23 +105,20 @@ sap.ui.define([
                 }
             });
 
-            // Lignes – valider uniquement s’il y en a
             const aLignes = oModel.getProperty("/lignes") || [];
-
-            if (aLignes.length > 0) {
-                // noublie pas d'ajouter " || !ligne.signe "
-                aLignes.forEach(ligne => {
-                    if (!ligne.posteId || !ligne.codeTransac || ligne.montant === "") {
+            if (aLignes.length) {
+                aLignes.forEach(l => {
+                    if (!l.posteId || !l.codeTransac || l.montant === "") {
                         isValid = false;
                     }
                 });
             }
 
-            // Vérification du solde
             const solde = parseFloat(oModel.getProperty("/solde"));
             if (isNaN(solde) || solde !== 0) {
                 isValid = false;
             }
+
             return isValid;
         },
 
@@ -146,61 +129,135 @@ sap.ui.define([
 
         onValider: function () {
             const oModel = this.getView().getModel();
+            const that = this;
 
-            // 👉 1. Mettre le timestamp de fin
-            oModel.setProperty("/finTraitement", new Date());
-
-            // 👉 2. Afficher un toast (ou appeler un backend, envoyer IDoc etc.)
-            MessageToast.show("Transaction envoyée à CAR avec succès.");
-
-            // 👉 3. Logique d’envoi IDoc (à implémenter si besoin)
+            MessageBox.confirm("Souhaitez-vous valider et envoyer cette transaction à CAR ?", {
+                title: "Confirmation de validation",
+                onClose: function (oAction) {
+                    if (oAction === MessageBox.Action.OK) {
+                        oModel.setProperty("/finTraitement", new Date());
+                        oModel.setProperty("/isExportEnabled", true);
+                        MessageToast.show("Transaction envoyée à CAR avec succès.");
+                    }
+                }
+            });
         },
 
         onNouveau: function () {
-            const oModel = this.getView().getModel();
-        
-            // Réinitialiser les valeurs du modèle
-            oModel.setProperty("/lignes", []);
-            oModel.setProperty("/solde", "0.00");
-            oModel.setProperty("/selectedIndices", []);
-            oModel.setProperty("/finTraitement", null);
-            oModel.setProperty("/debutTraitement", new Date());
-            oModel.setProperty("/isFormValid", false);
-        
-            // Réinitialiser les champs manuellement modifiables
-            const oView = this.getView();
-            const champsReset = [
-                "inputPointVente",
-                "inputDateVente",
-                "inputNumCaisse",
-                "inputRefTicket"
-            ];
-        
-            champsReset.forEach(id => {
-                const oField = oView.byId(id);
-                if (oField?.setValue) {
-                    oField.setValue("");
-                    oField.setValueState("None");
+            const that = this;
+
+            MessageBox.confirm("Souhaitez-vous réinitialiser le formulaire ?", {
+                title: "Confirmation de réinitialisation",
+                onClose: function (oAction) {
+                    if (oAction === MessageBox.Action.OK) {
+                        const oModel = that.getView().getModel();
+                        oModel.setProperty("/lignes", []);
+                        oModel.setProperty("/solde", "0.00");
+                        oModel.setProperty("/selectedIndices", []);
+                        oModel.setProperty("/finTraitement", null);
+                        oModel.setProperty("/debutTraitement", new Date());
+                        oModel.setProperty("/isFormValid", false);
+                        oModel.setProperty("/isExportEnabled", false);
+
+                        ["inputPointVente", "inputDateVente", "inputNumCaisse", "inputRefTicket"].forEach(id => {
+                            const oField = that.getView().byId(id);
+                            if (oField?.setValue) {
+                                oField.setValue("");
+                                oField.setValueState("None");
+                            }
+                        });
+
+                        MessageToast.show("Formulaire réinitialisé.");
+                    }
                 }
             });
-        
-            // Toast pour retour utilisateur
-            MessageToast.show("Formulaire réinitialisé.");
         },
 
         onQuitter: function () {
-            debugger;
-         
-                //  Retour au Fiori Launchpad (home)
-                sap.ushell.Container.getService("CrossApplicationNavigation")
-                    .toExternal({ target: { shellHash: "#" } });
-        
+            MessageBox.confirm("Souhaitez-vous quitter le formulaire ?", {
+                title: "Confirmation de sortie",
+                onClose: function (oAction) {
+                    if (oAction === MessageBox.Action.OK) {
+                        sap.ushell.Container.getService("CrossApplicationNavigation")
+                            .toExternal({ target: { shellHash: "#" } });
+                    }
+                }
+            });
+        },
+
+        onExporter: function () {
+            const that = this;
+            MessageBox.confirm("Souhaitez-vous exporter les données au format Excel ?", {
+                title: "Confirmation d’export",
+                onClose: function (oAction) {
+                    if (oAction === MessageBox.Action.OK) {
+                        that._exporterExcel();
+                    }
+                }
+            });
+        },
+
+        _exporterExcel: function () {
+            const oView = this.getView();
+            const oModel = oView.getModel();
+            const oData = oModel.getData();
+
+            const dateVente = oView.byId("inputDateVente").getDateValue();
+            const numCaisse = oView.byId("inputNumCaisse").getValue();
+            const numTransaction = oView.byId("inputNumTransaction").getValue();
+            const pointVente = oView.byId("inputPointVente").getValue();
+
+            const dd = String(dateVente.getDate()).padStart(2, '0');
+            const mm = String(dateVente.getMonth() + 1).padStart(2, '0');
+            const yyyy = dateVente.getFullYear();
+            const dateFormatted = `${dd}${mm}${yyyy}`;
+
+            const fileName = `Reclassement_${numCaisse}_${numTransaction}_SGM_${pointVente}_${dateFormatted}.xlsx`;
+
+            const formatDateTime = function (oDate) {
+                if (!oDate) return "";
+                const pad = (n) => (n < 10 ? '0' + n : n);
+                return `${pad(oDate.getDate())}/${pad(oDate.getMonth() + 1)}/${oDate.getFullYear()} ${pad(oDate.getHours())}:${pad(oDate.getMinutes())}:${pad(oDate.getSeconds())}`;
+            };
+
+            const aRows = oData.lignes.map((ligne) => ({
+                pointVente: pointVente,
+                numCaisse: numCaisse,
+                refTicket: oView.byId("inputRefTicket").getValue(),
+                dateVente: `${dd}/${mm}/${yyyy}`,
+                numTransaction: numTransaction,
+                posteId: ligne.posteId,
+                codeTransac: ligne.codeTransac,
+                libelleTransac: ligne.libelleTransac,
+                montant: ligne.montant,
+                utilisateur: oData.utilisateur,
+                debutTraitement: formatDateTime(oData.debutTraitement),
+                finTraitement: formatDateTime(oData.finTraitement)
+            }));
+
+            const aCols = [
+                { label: "Point de vente", property: "pointVente" },
+                { label: "Numéro de caisse", property: "numCaisse" },
+                { label: "Réf. Ticket Initial", property: "refTicket" },
+                { label: "Date de vente", property: "dateVente" },
+                { label: "Numéro de transaction", property: "numTransaction" },
+                { label: "n° de Poste", property: "posteId" },
+                { label: "Code Transaction Financière", property: "codeTransac" },
+                { label: "Libellé Transaction financière", property: "libelleTransac" },
+                { label: "Montants", property: "montant" },
+                { label: "Utilisateur", property: "utilisateur" },
+                { label: "Début du traitement", property: "debutTraitement" },
+                { label: "Fin du traitement", property: "finTraitement" }
+            ];
+
+            const oSpreadsheet = new Spreadsheet({
+                workbook: { columns: aCols },
+                dataSource: aRows,
+                fileName: fileName,
+                worker: false
+            });
+
+            oSpreadsheet.build().finally(() => oSpreadsheet.destroy());
         }
-        
-
-        
-        
-
-
     });
 });
