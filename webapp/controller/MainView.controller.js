@@ -84,16 +84,54 @@ sap.ui.define([
             this.mettreAJourValidation();
         },
 
+        // validerChampsRequis: function () {
+        //     const oView = this.getView();
+        //     const oModel = oView.getModel();
+        //     let isValid = true;
+
+        //     const champsForm = [
+        //         "inputPointVente", "inputDateVente", "inputNumTransaction", "inputTypeTransaction",
+        //         "inputNumCaisse", "inputDevise", "inputUtilisateur", "inputRefTicket", "inputDebut"
+        //     ];
+
+        //     champsForm.forEach(id => {
+        //         const oField = oView.byId(id);
+        //         const value = oField.getValue?.() || oField.getDateValue?.();
+        //         if (!value) {
+        //             oField.setValueState("Error");
+        //             isValid = false;
+        //         } else {
+        //             oField.setValueState("None");
+        //         }
+        //     });
+
+        //     const aLignes = oModel.getProperty("/lignes") || [];
+        //     if (aLignes.length) {
+        //         aLignes.forEach(l => {
+        //             if (!l.posteId || !l.codeTransac || l.montant === "") {
+        //                 isValid = false;
+        //             }
+        //         });
+        //     }
+
+        //     const solde = parseFloat(oModel.getProperty("/solde"));
+        //     if (isNaN(solde) || solde !== 0) {
+        //         isValid = false;
+        //     }
+
+        //     return isValid;
+        // },
+
         validerChampsRequis: function () {
             const oView = this.getView();
             const oModel = oView.getModel();
             let isValid = true;
-
+        
             const champsForm = [
                 "inputPointVente", "inputDateVente", "inputNumTransaction", "inputTypeTransaction",
                 "inputNumCaisse", "inputDevise", "inputUtilisateur", "inputRefTicket", "inputDebut"
             ];
-
+        
             champsForm.forEach(id => {
                 const oField = oView.byId(id);
                 const value = oField.getValue?.() || oField.getDateValue?.();
@@ -104,23 +142,26 @@ sap.ui.define([
                     oField.setValueState("None");
                 }
             });
-
+        
             const aLignes = oModel.getProperty("/lignes") || [];
-            if (aLignes.length) {
+            if (aLignes.length === 0) {
+                isValid = false; // 👉 aucune ligne = non valide
+            } else {
                 aLignes.forEach(l => {
                     if (!l.posteId || !l.codeTransac || l.montant === "") {
                         isValid = false;
                     }
                 });
             }
-
+        
             const solde = parseFloat(oModel.getProperty("/solde"));
             if (isNaN(solde) || solde !== 0) {
                 isValid = false;
             }
-
+        
             return isValid;
         },
+        
 
         mettreAJourValidation: function () {
             const isValid = this.validerChampsRequis();
